@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $csrf_token = $_POST['csrf_token'] ?? '';
 
 // Validate CSRF token
-if (!validateCSRFToken($csrf_token)) {
+if (!verifyCSRFToken($csrf_token)) {
     $_SESSION['booking_errors'] = ["Invalid security token."];
     header('Location: user/my_cart.php');
     exit();

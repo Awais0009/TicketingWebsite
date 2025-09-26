@@ -67,8 +67,8 @@ include __DIR__ . '/inc/header.php';
         <?php if (isLoggedIn()): ?>
             <div class="alert alert-success">
                 <i class="bi bi-check-circle me-2"></i>
-                Welcome back, <strong><?php echo sanitizeOutput($_SESSION['name']); ?></strong>!
-                <small class="text-muted">(<?php echo ucfirst(sanitizeOutput($_SESSION['role'])); ?>)</small>
+                Welcome back, <strong><?php echo sanitizeOutput($_SESSION['user_name'] ?? 'User'); ?></strong>!
+                <small class="text-muted">(<?php echo ucfirst(sanitizeOutput($_SESSION['role'] ?? 'user')); ?>)</small>
             </div>
         <?php else: ?>
             <div class="alert alert-info">

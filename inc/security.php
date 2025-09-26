@@ -1,54 +1,52 @@
 <?php
+
+
+// Prevent multiple inclusions
+if (!function_exists('sanitizeOutput')) {
+
 /**
- * Basic security functions
+ * Sanitize output for display
  */
-
-// Generate CSRF token
-function generateCSRFToken() {
-    if (!isset($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
-}
-
-// Validate CSRF token
-function validateCSRFToken($token) {
-    if (!isset($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $token)) {
-        return false;
-    }
-    return true;
-}
-
-// Clean input (basic sanitation for user input)
-function cleanInput($data) {
-    $data = trim($data);
-    $data = stripslashes($data);
-    return $data;
-}
-
-// Sanitize output (prevent XSS when displaying data)
 function sanitizeOutput($data) {
-    return htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($data ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-// Check if user is logged in
-function isLoggedIn() {
-    return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+/**
+ * Check if user has specific role
+ */
+function hasRole($role) {
+    return isset($_SESSION['role']) && $_SESSION['role'] === $role;
 }
 
-// Check user role
-function hasRole($requiredRole) {
-    if (!isLoggedIn()) {
-        return false;
+/**
+ * Check if user is admin
+ */
+function isAdmin() {
+    return hasRole('admin');
+}
+
+/**
+ * Check if user is organizer
+ */
+function isOrganizer() {
+    return hasRole('organizer') || hasRole('admin');
+}
+
+/**
+ * Require specific role
+ */
+function requireRole($role) {
+    if (!hasRole($role)) {
+        header('Location: /index.php?error=access_denied');
+        exit;
     }
-
-    $userRole = $_SESSION['role'] ?? 'user';
-
-    // Admin has access to everything
-    if ($userRole === 'admin') {
-        return true;
-    }
-
-    // Check specific role
-    return $userRole === $requiredRole;
 }
+
+/**
+ * Require admin access
+ */
+function requireAdmin() {
+    requireRole('admin');
+}
+
+} // End function_exists check

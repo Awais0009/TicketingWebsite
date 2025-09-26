@@ -30,9 +30,8 @@ foreach ($required_fields as $field) {
 
 // SIMPLE payment processing - just update status
 try {
-    // Generate truly unique payment ID with microseconds and random
-    $payment_id = 'PAY_' . date('YmdHis') . '_' . microtime(true) . '_' . $user_id . '_' . rand(100, 999);
-    $payment_id = str_replace('.', '', $payment_id); // Remove decimal point
+    // Generate unique payment ID
+    $payment_id = 'PAY_' . date('YmdHis') . '_' . $user_id;
     
     // Get cart items first
     $stmt = $pdo->prepare("SELECT event_id, tickets_requested FROM user_bookings WHERE user_id = ? AND status = 'cart'");
@@ -44,15 +43,15 @@ try {
         exit;
     }
     
-    // Update cart to paid directly (clear reference first if needed)
+    // Update cart to paid (set booking_reference to NULL first to avoid unique constraint)
     $stmt = $pdo->prepare("UPDATE user_bookings SET booking_reference = NULL WHERE user_id = ? AND status = 'cart'");
     $stmt->execute([$user_id]);
     
-    // Now update with new payment reference
+    // Now update with payment reference
     $stmt = $pdo->prepare("UPDATE user_bookings SET status = 'paid', booking_reference = ? WHERE user_id = ? AND status = 'cart'");
     $result = $stmt->execute([$payment_id, $user_id]);
     
-    if ($result && $stmt->rowCount() > 0) {
+    if ($result) {
         // Reduce available tickets
         foreach ($cart_items as $item) {
             $stmt = $pdo->prepare("UPDATE events SET available_tickets = available_tickets - ? WHERE id = ?");
@@ -68,13 +67,7 @@ try {
     
 } catch (Exception $e) {
     error_log("Payment error: " . $e->getMessage());
-    
-    // If unique constraint error, try with different ID
-    if (strpos($e->getMessage(), 'duplicate key') !== false) {
-        header('Location: checkout.php?error=' . urlencode('Payment processing conflict. Please try again.'));
-    } else {
-        header('Location: checkout.php?error=' . urlencode('Database error'));
-    }
+    header('Location: checkout.php?error=' . urlencode('Database error'));
     exit;
 }
 ?>

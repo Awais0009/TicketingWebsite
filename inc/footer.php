@@ -1,24 +1,36 @@
 </main>
 
-    <!-- Footer -->
-    <footer class="footer mt-5">
+    <footer class="bg-dark text-light mt-5 py-4">
         <div class="container">
             <div class="row">
-                <div class="col-12 text-center">
-                    <p class="text-muted mb-0">
-                        &copy; <?php echo date('Y'); ?> EventTickets. All rights reserved.
-                    </p>
+                <div class="col-md-6">
+                    <h5><i class="bi bi-ticket-perforated me-2"></i>TicketHub</h5>
+                    <p>Your premier destination for event tickets and experiences.</p>
                 </div>
+                <div class="col-md-6">
+                    <h5>Quick Links</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="index.php" class="text-light text-decoration-none">Home</a></li>
+                        <li><a href="events.php" class="text-light text-decoration-none">Events</a></li>
+                        <li><a href="contact.php" class="text-light text-decoration-none">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr>
+            <div class="text-center">
+                <p>&copy; <?= date('Y') ?> TicketHub. All rights reserved.</p>
             </div>
         </div>
     </footer>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Custom JS - check if file exists -->
-    <?php if (file_exists(__DIR__ . '/../assets/js/validation.js')): ?>
-        <script src="/assets/js/validation.js"></script>
-    <?php endif; ?>
+    <!-- Custom JS -->
+    <?php 
+    // Determine correct path to assets based on current directory
+    $currentDir = basename(dirname($_SERVER['SCRIPT_NAME']));
+    $assetsPath = ($currentDir === 'payment' || $currentDir === 'user' || $currentDir === 'auth' || $currentDir === 'admin' || $currentDir === 'organizer') ? '../assets' : 'assets';
+    ?>
+    <script src="<?= $assetsPath ?>/js/validation.js"></script>
 </body>
 </html>

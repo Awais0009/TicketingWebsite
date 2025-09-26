@@ -1,120 +1,168 @@
 <?php
-require_once __DIR__ . '/../inc/db.php';
-require_once __DIR__ . '/../inc/security.php';
+// Start session first
+session_start();
 
-$pageTitle = 'Login';
+// Include required files
+require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/functions.php';
+require_once __DIR__ . '/../inc/security.php';
 
 // Redirect if already logged in
 if (isLoggedIn()) {
-    header('Location: ../index.php');
-    exit();
+    if (isset($_GET['redirect'])) {
+        $redirect_to = $_GET['redirect'];
+    } else {
+        // Redirect to appropriate dashboard based on role
+        switch ($_SESSION['role'] ?? 'user') {
+            case 'admin':
+                $redirect_to = '../admin/admin_dashboard.php';
+                break;
+            case 'organizer':
+                $redirect_to = '../organizer/Organizer_Dashboard.php';
+                break;
+            default:
+                $redirect_to = '../index.php';
+                break;
+        }
+    }
+    header("Location: $redirect_to");
+    exit;
 }
 
-// Handle form submission
+$error = '';
+$redirect_to = $_GET['redirect'] ?? '../index.php';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = cleanInput($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $csrf_token = $_POST['csrf_token'] ?? '';
-    
-    $errors = [];
-    
-    // Validate CSRF token
-    if (!validateCSRFToken($csrf_token)) {
-        $errors[] = "Invalid security token.";
-    }
-    
-    // Validate input
-    if (empty($email)) {
-        $errors[] = "Email is required.";
-    }
-    
-    if (empty($password)) {
-        $errors[] = "Password is required.";
-    }
-    
-    // Authenticate user
-    if (empty($errors)) {
-        try {
-            $stmt = $pdo->prepare("SELECT id, name, email, password, role FROM users WHERE email = ?");
-            $stmt->execute([$email]);
-            $user = $stmt->fetch();
-            
-            if ($user && password_verify($password, $user['password'])) {
-                // Login successful - create session
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['name'] = $user['name'];
-                $_SESSION['email'] = $user['email'];
-                $_SESSION['role'] = $user['role'];
+    // Use the correct function name: verifyCSRFToken (not validateCSRFToken)
+    if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+        $error = 'Security error. Please refresh the page and try again.';
+    } else {
+        $email = cleanInput($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        
+        if (empty($email) || empty($password)) {
+            $error = 'Please fill in all fields';
+        } elseif (!isValidEmail($email)) {
+            $error = 'Please enter a valid email address';
+        } else {
+            try {
+                $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+                $stmt->execute([$email]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
                 
-                // Redirect based on role
-                switch ($user['role']) {
-                    case 'admin':
-                        header('Location: ../admin/admin_dashboard.php');
-                        break;
-                    case 'organizer':
-                        header('Location: ../organizer/organizer_dashboard.php');
-                        break;
-                    default:
-                        header('Location: ../index.php');
-                        break;
+                if ($user && verifyPassword($password, $user['password'])) {
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['name'] = $user['name']; // Fix: use 'name' instead of 'user_name'
+                    $_SESSION['user_name'] = $user['name']; // Keep backward compatibility
+                    $_SESSION['user_role'] = $user['role'];
+                    $_SESSION['role'] = $user['role']; // Add this for hasRole() function
+                    
+                    // Redirect to appropriate dashboard based on role
+                    if (isset($_GET['redirect'])) {
+                        $redirect_to = $_GET['redirect'];
+                    } else {
+                        // Default redirects based on role
+                        switch ($user['role']) {
+                            case 'admin':
+                                $redirect_to = '../admin/admin_dashboard.php';
+                                break;
+                            case 'organizer':
+                                $redirect_to = '../organizer/Organizer_Dashboard.php';
+                                break;
+                            default:
+                                $redirect_to = '../index.php';
+                                break;
+                        }
+                    }
+                    
+                    header("Location: $redirect_to");
+                    exit;
+                } else {
+                    $error = 'Invalid email or password';
+                    error_log("Login failed for email: $email");
                 }
-                exit();
-            } else {
-                $errors[] = "Invalid email or password.";
+            } catch (Exception $e) {
+                error_log("Login error: " . $e->getMessage());
+                $error = 'Login failed. Please try again.';
             }
-        } catch (PDOException $e) {
-            $errors[] = "Login failed. Please try again.";
-            error_log("Database error in login: " . $e->getMessage());
         }
     }
 }
 
+$pageTitle = 'Login';
 include __DIR__ . '/../inc/header.php';
 ?>
 
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h4><i class="bi bi-box-arrow-in-right me-2"></i>Login</h4>
-            </div>
-            <div class="card-body">
-                
-                <?php if (!empty($errors)): ?>
-                    <div class="alert alert-danger">
-                        <?php foreach ($errors as $error): ?>
-                            <div><?php echo sanitizeOutput($error); ?></div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-                
-                <!-- Test Accounts Info -->
-               
-                
-                <form method="POST" class="needs-validation" novalidate>
-                    <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center">
+                    <h4 class="mb-0">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Login to Your Account
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    <?php if ($error): ?>
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="bi bi-exclamation-triangle me-2"></i><?= e($error) ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
                     
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email Address</label>
-                        <input type="email" class="form-control" id="email" name="email" 
-                               value="<?php echo sanitizeOutput($_POST['email'] ?? ''); ?>" required>
-                    </div>
+                    <form method="POST" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">
+                                <i class="bi bi-envelope me-1"></i>Email Address
+                            </label>
+                            <input type="email" 
+                                   class="form-control" 
+                                   id="email" 
+                                   name="email" 
+                                   value="<?= e($_POST['email'] ?? '') ?>" 
+                                   required 
+                                   autocomplete="email"
+                                   placeholder="Enter your email">
+                            <div class="invalid-feedback">Please provide a valid email address.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">
+                                <i class="bi bi-lock me-1"></i>Password
+                            </label>
+                            <input type="password" 
+                                   class="form-control" 
+                                   id="password" 
+                                   name="password" 
+                                   required 
+                                   autocomplete="current-password"
+                                   placeholder="Enter your password">
+                            <div class="invalid-feedback">Please provide your password.</div>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                            </button>
+                        </div>
+                    </form>
                     
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
+                    <hr class="my-4">
                     
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-box-arrow-in-right me-2"></i>Login
-                    </button>
-                </form>
-                
-                <div class="text-center mt-3">
-                    <p>Don't have an account? <a href="register.php">Register here</a></p>
+                    <div class="text-center">
+                        <p class="mb-2">Don't have an account?</p>
+                        <a href="register.php<?= isset($_GET['redirect']) ? '?redirect=' . urlencode($_GET['redirect']) : '' ?>" 
+                           class="btn btn-outline-success">
+                            <i class="bi bi-person-plus me-2"></i>Create Account
+                        </a>
+                    </div>
                 </div>
             </div>
-        </div>
+
+            
+       </div>
     </div>
 </div>
 

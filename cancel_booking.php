@@ -21,7 +21,7 @@ $csrf_token = $_POST['csrf_token'] ?? '';
 $errors = [];
 
 // Validate CSRF token
-if (!validateCSRFToken($csrf_token)) {
+if (!verifyCSRFToken($csrf_token)) {
     $errors[] = "Invalid security token.";
 }
 

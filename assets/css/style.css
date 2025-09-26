@@ -1,31 +1,42 @@
 /* Basic custom styles */
+:root {
+    --primary-color: #0d6efd;
+    --secondary-color: #6c757d;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+}
+
 body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
 }
 
 main {
     flex: 1;
 }
 
+/* Navbar */
 .navbar-brand {
-    font-weight: bold;
+    font-weight: 700;
+    font-size: 1.5rem;
 }
-
-/* Custom CSS for EventTickets */
 
 /* Event Cards */
 .event-card {
-    transition: transform 0.2s ease-in-out;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
     border: none;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .event-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 
 /* Carousel styling */
@@ -33,9 +44,26 @@ main {
     border-radius: 8px;
 }
 
+/* Sticky sidebar */
+.sticky-top {
+    top: 20px !important;
+}
+
+/* Button styling */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
 /* Alert styling */
 .alert {
-    border-left: 4px solid;
+    border-radius: 8px;
+    border: none;
 }
 
 .alert-success {
@@ -54,15 +82,6 @@ main {
     border-left-color: #17a2b8;
 }
 
-/* Button hover effects */
-.btn {
-    transition: all 0.3s ease;
-}
-
-.btn:hover {
-    transform: translateY(-1px);
-}
-
 /* Cart badge */
 .navbar-nav .nav-link .badge {
     font-size: 0.7em;
@@ -70,16 +89,95 @@ main {
 
 /* Footer */
 .footer {
-    margin-top: 50px;
+    margin-top: auto;
     padding: 20px 0;
-    background-color: #f8f9fa;
+    background: #212529 !important;
     border-top: 1px solid #dee2e6;
 }
 
+/* Progress bars */
+.progress {
+    border-radius: 10px;
+}
+
+/* Custom spacing */
+.py-6 {
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+}
+
+/* Hero section */
+.hero-section {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #7b68ee 100%);
+    color: white;
+}
+
+/* Form styling */
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Badge styling */
+.badge {
+    font-weight: 500;
+}
+
 /* Loading states */
-.btn.loading {
+.btn-loading {
+    position: relative;
     pointer-events: none;
-    opacity: 0.7;
+}
+
+.btn-loading::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive images */
+.img-fluid {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #0a58ca;
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
 }
 
 /* Table responsive */

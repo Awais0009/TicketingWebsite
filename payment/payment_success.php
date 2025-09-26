@@ -1,158 +1,139 @@
 <?php
-
 require_once __DIR__ . '/../inc/db.php';
 require_once __DIR__ . '/../inc/security.php';
 
-// Check if user is logged in
 if (!isLoggedIn()) {
-    header('Location: ../auth/login.php');
-    exit();
+    header('Location: ../auth/Login.php');
+    exit;
 }
 
-// Check if payment success data exists
-if (!isset($_SESSION['payment_success'])) {
-    header('Location: ../user/my_cart.php');
-    exit();
+$payment_id = $_GET['payment_id'] ?? '';
+$user_id = $_SESSION['user_id'];
+
+if (!$payment_id) {
+    header('Location: ../index.php?error=' . urlencode('Invalid payment reference'));
+    exit;
 }
 
-$payment_data = $_SESSION['payment_success'];
-unset($_SESSION['payment_success']); // Clear the session data
+try {
+    // Get booked events for this payment
+    $stmt = $pdo->prepare("
+        SELECT 
+            ub.id,
+            ub.tickets_requested,
+            ub.total_amount,
+            ub.created_at as booking_date,
+            e.title,
+            e.event_date,
+            e.venue,
+            e.price as unit_price
+        FROM user_bookings ub
+        JOIN events e ON ub.event_id = e.id
+        WHERE ub.user_id = ? AND ub.booking_reference = ? AND ub.status = 'paid'
+        ORDER BY e.event_date ASC
+    ");
+    $stmt->execute([$user_id, $payment_id]);
+    $booked_events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    if (empty($booked_events)) {
+        header('Location: ../index.php?error=' . urlencode('Payment not found'));
+        exit;
+    }
+    
+    $total_amount = array_sum(array_column($booked_events, 'total_amount'));
+    $total_tickets = array_sum(array_column($booked_events, 'tickets_requested'));
+    
+    // Get user details
+    $stmt = $pdo->prepare("SELECT name, email FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+} catch (Exception $e) {
+    error_log("Payment success page error: " . $e->getMessage());
+    header('Location: ../index.php?error=' . urlencode('Error loading payment details'));
+    exit;
+}
 
 $pageTitle = 'Payment Successful';
 include __DIR__ . '/../inc/header.php';
 ?>
 
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <!-- Success Message -->
-        <div class="card border-success">
-            <div class="card-header bg-success text-white text-center">
-                <h4><i class="bi bi-check-circle me-2"></i>Payment Successful!</h4>
-            </div>
-            <div class="card-body text-center">
-                <div class="mb-4">
-                    <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-success text-white text-center">
+                    <h3 class="mb-0"><i class="bi bi-check-circle me-2"></i>Payment Successful!</h3>
                 </div>
-                
-                <h5 class="text-success mb-3">Thank you for your payment!</h5>
-                <p class="lead">Your booking has been confirmed and you will receive a confirmation email shortly.</p>
-                
-                <!-- Payment Details -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light">
-                        <h6 class="mb-0">Payment Details</h6>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <h4>Thank you for your purchase, <?= e($user['name']) ?>!</h4>
+                        <p class="text-muted">Your tickets have been confirmed.</p>
+                        <p><strong>Payment ID:</strong> <?= e($payment_id) ?></p>
                     </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <strong>Payment Method:</strong><br>
-                                <span class="text-muted">
-                                    <?php 
-                                    switch($payment_data['method']) {
-                                        case 'stripe': echo 'Stripe Payment'; break;
-                                        case 'demo': echo 'Demo Payment'; break;
-                                        case 'test': echo 'Test Payment'; break;
-                                        case 'js_test': echo 'JavaScript Test'; break;
-                                        default: echo ucfirst($payment_data['method']);
-                                    }
-                                    ?>
-                                    <?php if (isset($payment_data['test_mode'])): ?>
-                                        <span class="badge bg-warning text-dark ms-2">Test Mode</span>
-                                    <?php endif; ?>
-                                </span>
-                            </div>
-                            <div class="col-md-6">
-                                <strong>Total Amount:</strong><br>
-                                <span class="text-success fs-5">$<?php echo number_format($payment_data['total_amount'], 2); ?></span>
-                            </div>
-                        </div>
+                    
+                    <h5>Booking Summary</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Event</th>
+                                    <th>Date & Venue</th>
+                                    <th>Tickets</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($booked_events as $event): ?>
+                                <tr>
+                                    <td><?= e($event['title']) ?></td>
+                                    <td>
+                                        <?= formatDate($event['event_date']) ?><br>
+                                        <small class="text-muted"><?= e($event['venue']) ?></small>
+                                    </td>
+                                    <td><?= $event['tickets_requested'] ?></td>
+                                    <td><?= formatPrice($event['total_amount']) ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-success">
+                                    <th colspan="2">Total</th>
+                                    <th><?= $total_tickets ?> tickets</th>
+                                    <th><?= formatPrice($total_amount) ?></th>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
-                </div>
-                
-                <!-- Booking References -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light">
-                        <h6 class="mb-0">Booking References</h6>
-                    </div>
-                    <div class="card-body">
-                        <?php foreach ($payment_data['booking_references'] as $ref): ?>
-                            <div class="mb-2">
-                                <span class="badge bg-primary fs-6"><?php echo sanitizeOutput($ref); ?></span>
-                            </div>
-                        <?php endforeach; ?>
-                        <small class="text-muted">Keep these reference numbers for your records</small>
+                    
+                    <div class="text-center mt-4">
+                        <a href="../user/my_bookings.php" class="btn btn-primary me-2">
+                            <i class="bi bi-ticket me-2"></i>View My Bookings
+                        </a>
+                        <a href="../index.php" class="btn btn-secondary">
+                            <i class="bi bi-house me-2"></i>Back to Home
+                        </a>
                     </div>
                 </div>
-                
-                <!-- Next Steps -->
-                <div class="alert alert-info">
-                    <h6><i class="bi bi-info-circle me-2"></i>What's Next?</h6>
-                    <ul class="text-start mb-0">
-                        <li>You will receive a confirmation email with your e-tickets</li>
-                        <li>Please arrive 30 minutes before the event</li>
-                        <li>Bring a valid ID for entry</li>
-                        <li>Contact support if you have any questions</li>
-                    </ul>
-                </div>
-                
-                <!-- Action Buttons -->
-                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                    <a href="../index.php" class="btn btn-primary btn-lg">
-                        <i class="bi bi-calendar-event me-2"></i>Browse More Events
-                    </a>
-                    <a href="../user/my_bookings.php" class="btn btn-outline-primary btn-lg">
-                        <i class="bi bi-ticket me-2"></i>View My Bookings
-                    </a>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Additional Information -->
-        <div class="card mt-4">
-            <div class="card-body">
-                <h6><i class="bi bi-question-circle me-2"></i>Need Help?</h6>
-                <p class="mb-0">
-                    If you have any questions about your booking, please contact our support team at:
-                    <br>
-                    <i class="bi bi-envelope me-1"></i>support@eventtickets.com
-                    <br>
-                    <i class="bi bi-telephone me-1"></i>+1 (555) 123-4567
-                </p>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-// Print functionality
-function printReceipt() {
-    window.print();
-}
-
-// Confetti effect (optional)
-document.addEventListener('DOMContentLoaded', function() {
-    // Simple celebration animation
-    setTimeout(function() {
-        const successIcon = document.querySelector('.bi-check-circle-fill');
-        if (successIcon) {
-            successIcon.style.animation = 'bounce 1s ease-in-out';
-        }
-    }, 500);
-});
-</script>
-
 <style>
-@keyframes bounce {
-    0%, 20%, 50%, 80%, 100% {
-        transform: translateY(0);
-    }
-    40% {
-        transform: translateY(-20px);
-    }
-    60% {
-        transform: translateY(-10px);
-    }
+@media print {
+    .btn, nav, footer { display: none !important; }
+    .container { max-width: none !important; }
 }
 </style>
+
+<script>
+// Auto redirect to bookings after 5 seconds
+setTimeout(function() {
+    if (confirm('Would you like to view your bookings now?')) {
+        window.location.href = '../user/my_bookings.php';
+    }
+}, 3000);
+</script>
 
 <?php include __DIR__ . '/../inc/footer.php'; ?>
