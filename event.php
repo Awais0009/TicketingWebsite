@@ -1,391 +1,226 @@
 <?php
-require_once __DIR__ . '/inc/db.php';
-require_once __DIR__ . '/inc/security.php';
+session_start();
+require_once 'inc/db.php';
 
-// Get event ID
-$event_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
-if (!$event_id) {
+if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     header('Location: index.php');
-    exit();
+    exit;
 }
 
-// Get event details with better error handling
+$event_id = (int)$_GET['id'];
+
 try {
-    // Clear any cached plans first
-    $pdo->exec("DEALLOCATE ALL");
-    
-    // Get event details (separate query to avoid caching issues)
-    $event_query = "
-        SELECT e.id, e.title, e.description, e.event_date, e.venue, e.price, 
-               e.total_tickets, e.available_tickets, e.organizer_id, e.created_at,
-               u.name as organizer_name, u.email as organizer_email
-        FROM events e
-        LEFT JOIN users u ON e.organizer_id = u.id
-        WHERE e.id = $1
-    ";
-    
-    $stmt = $pdo->prepare($event_query);
+    // Get event details
+    $stmt = $pdo->prepare("SELECT e.*, u.full_name as organizer_name 
+                          FROM events e 
+                          LEFT JOIN users u ON e.organizer_id = u.id 
+                          WHERE e.id = ?");
     $stmt->execute([$event_id]);
-    $event = $stmt->fetch();
+    $event = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$event) {
-        $_SESSION['error'] = "Event not found.";
-        header('Location: index.php');
-        exit();
+        header('Location: index.php?error=event_not_found');
+        exit;
     }
     
-    // Initialize images array
-    $event['images'] = [];
-    
-    // Try to get event images (check if table exists first)
+    // Get event images (handle gracefully if table issues)
+    $images = [];
     try {
-        $table_check = $pdo->query("SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_name = 'event_images'
-        )");
-        $table_exists = $table_check->fetch()['exists'];
-        
-        if ($table_exists) {
-            $images_query = "
-                SELECT image_url, display_order 
-                FROM event_images 
-                WHERE event_id = $1 
-                ORDER BY display_order ASC
-            ";
-            $stmt = $pdo->prepare($images_query);
-            $stmt->execute([$event_id]);
-            $event['images'] = $stmt->fetchAll();
+        $stmt = $pdo->prepare("SELECT image_url FROM event_images WHERE event_id = ? ORDER BY id");
+        $stmt->execute([$event_id]);
+        $images = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Exception $e) {
+        // If event_images query fails, try to use images from events table
+        if (!empty($event['images'])) {
+            $decoded = json_decode($event['images'], true);
+            if (is_array($decoded)) {
+                $images = $decoded;
+            }
         }
-    } catch (PDOException $e) {
-        // Images table issue - continue without images
-        error_log("Event images error: " . $e->getMessage());
-        $event['images'] = [];
     }
     
-    // Check user's booking status
+    // Check if user has items in cart for this event
     $user_booking = null;
-    if (isLoggedIn()) {
+    if (isset($_SESSION['user_id'])) {
         try {
-            $booking_query = "
-                SELECT id, user_id, event_id, tickets_requested, status, 
-                       booking_reference, total_amount, created_at, updated_at
-                FROM user_bookings 
-                WHERE user_id = $1 AND event_id = $2 AND status IN ('cart', 'booked')
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ";
-            $stmt = $pdo->prepare($booking_query);
+            $stmt = $pdo->prepare("SELECT * FROM user_bookings 
+                                  WHERE user_id = ? AND event_id = ? AND status IN ('cart', 'booked')
+                                  ORDER BY created_at DESC LIMIT 1");
             $stmt->execute([$_SESSION['user_id'], $event_id]);
-            $user_booking = $stmt->fetch();
-        } catch (PDOException $e) {
-            error_log("User booking check error: " . $e->getMessage());
-            $user_booking = null;
+            $user_booking = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            // Continue without booking info if error
         }
     }
     
-} catch (PDOException $e) {
-    error_log("Database error in event detail: " . $e->getMessage());
-    
-    // Show user-friendly error page
-    $pageTitle = "Database Error";
-    include __DIR__ . '/inc/header.php';
-    ?>
-    
-    <div class="container mt-5">
-        <div class="alert alert-danger">
-            <h4><i class="bi bi-exclamation-triangle me-2"></i>Database Error</h4>
-            <p>We're having trouble loading this event. This might be due to:</p>
-            <ul>
-                <li>Database connection issues</li>
-                <li>Cached query plan conflicts</li>
-                <li>Table structure changes</li>
-            </ul>
-            <p><strong>Error:</strong> <?php echo sanitizeOutput($e->getMessage()); ?></p>
-            
-            <div class="mt-3">
-                <a href="debug_reset.php" class="btn btn-warning me-2">
-                    <i class="bi bi-arrow-clockwise me-2"></i>Reset Database Cache
-                </a>
-                <a href="index.php" class="btn btn-primary">
-                    <i class="bi bi-house me-2"></i>Back to Events
-                </a>
-            </div>
-        </div>
-    </div>
-    
-    <?php
-    include __DIR__ . '/inc/footer.php';
-    exit();
+} catch (Exception $e) {
+    error_log("Event page error: " . $e->getMessage());
+    header('Location: index.php?error=database_error');
+    exit;
 }
 
-$pageTitle = $event['title'];
-include __DIR__ . '/inc/header.php';
+$pageTitle = htmlspecialchars($event['title']);
+include 'inc/header.php';
 ?>
 
-<!-- Debug Info (remove in production) -->
-<div class="alert alert-info">
-    <strong>Debug:</strong> 
-    Event ID: <?php echo $event_id; ?> | 
-    Event Found: <?php echo $event ? 'Yes' : 'No'; ?> | 
-    Images: <?php echo count($event['images']); ?> | 
-    User Booking: <?php echo $user_booking ? $user_booking['status'] : 'None'; ?> |
-    Available Tickets: <?php echo $event['available_tickets']; ?>
-</div>
-
-<div class="row">
-    <!-- Event Images -->
-    <div class="col-md-6 mb-4">
-        <?php if (!empty($event['images'])): ?>
-            <div id="eventCarousel" class="carousel slide" data-bs-ride="carousel">
+<div class="container mt-4">
+    <!-- Event Header -->
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Image Carousel -->
+            <?php if (!empty($images)): ?>
+            <div id="eventCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
+                <div class="carousel-indicators">
+                    <?php for($i = 0; $i < count($images); $i++): ?>
+                    <button type="button" data-bs-target="#eventCarousel" data-bs-slide-to="<?= $i ?>" 
+                            <?= $i === 0 ? 'class="active" aria-current="true"' : '' ?> 
+                            aria-label="Slide <?= $i + 1 ?>"></button>
+                    <?php endfor; ?>
+                </div>
                 <div class="carousel-inner">
-                    <?php foreach ($event['images'] as $index => $image): ?>
-                    <div class="carousel-item <?php echo $index === 0 ? 'active' : ''; ?>">
-                        <img src="<?php echo sanitizeOutput($image['image_url']); ?>" 
-                             class="d-block w-100" 
-                             alt="<?php echo sanitizeOutput($event['title']); ?>"
-                             style="height: 400px; object-fit: cover; border-radius: 10px;">
+                    <?php foreach($images as $index => $image): ?>
+                    <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
+                        <img src="<?= htmlspecialchars($image) ?>" class="d-block w-100" alt="Event Image" 
+                             style="height: 400px; object-fit: cover;">
                     </div>
                     <?php endforeach; ?>
                 </div>
-                
-                <?php if (count($event['images']) > 1): ?>
-                <!-- Carousel Controls -->
-                <button class="carousel-control-prev" type="button" 
-                        data-bs-target="#eventCarousel" data-bs-slide="prev">
-                    <span class="carousel-control-prev-icon"></span>
+                <button class="carousel-control-prev" type="button" data-bs-target="#eventCarousel" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
                 </button>
-                <button class="carousel-control-next" type="button" 
-                        data-bs-target="#eventCarousel" data-bs-slide="next">
-                    <span class="carousel-control-next-icon"></span>
+                <button class="carousel-control-next" type="button" data-bs-target="#eventCarousel" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
                 </button>
-                
-                <!-- Indicators -->
-                <div class="carousel-indicators">
-                    <?php foreach ($event['images'] as $index => $image): ?>
-                    <button type="button" data-bs-target="#eventCarousel" 
-                            data-bs-slide-to="<?php echo $index; ?>" 
-                            <?php echo $index === 0 ? 'class="active"' : ''; ?>></button>
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
             </div>
-        <?php else: ?>
-            <!-- Default placeholder -->
-            <div class="d-flex align-items-center justify-content-center bg-light text-center" 
-                 style="height: 400px; border-radius: 10px; border: 2px dashed #dee2e6;">
-                <div>
-                    <i class="bi bi-calendar-event fs-1 text-muted mb-3"></i>
-                    <h5 class="text-muted"><?php echo sanitizeOutput($event['title']); ?></h5>
-                    <p class="text-muted">No images available</p>
+            <?php else: ?>
+            <!-- Default image if no images available -->
+            <div class="mb-4">
+                <img src="assets/images/default-event.jpg" class="img-fluid w-100" alt="Event" 
+                     style="height: 400px; object-fit: cover; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; align-items: center; justify-content: center;">
+            </div>
+            <?php endif; ?>
+
+            <!-- Event Details -->
+            <h1 class="mb-3"><?= htmlspecialchars($event['title']) ?></h1>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <p><i class="bi bi-calendar-event me-2"></i><strong>Date:</strong> 
+                       <?= date('F j, Y \a\t g:i A', strtotime($event['event_date'])) ?></p>
+                </div>
+                <div class="col-md-6">
+                    <p><i class="bi bi-geo-alt me-2"></i><strong>Venue:</strong> 
+                       <?= htmlspecialchars($event['venue']) ?></p>
                 </div>
             </div>
-        <?php endif; ?>
-    </div>
-    
-    <!-- Event Details -->
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-body">
-                <h1 class="card-title"><?php echo sanitizeOutput($event['title']); ?></h1>
-                
-                <div class="mb-3">
-                    <p class="text-muted mb-2">
-                        <i class="bi bi-calendar me-2"></i>
-                        <strong><?php echo date('l, F j, Y @ g:i A', strtotime($event['event_date'])); ?></strong>
-                    </p>
-                    <p class="text-muted mb-2">
-                        <i class="bi bi-geo-alt me-2"></i>
-                        <?php echo sanitizeOutput($event['venue']); ?>
-                    </p>
-                    <?php if ($event['organizer_name']): ?>
-                    <p class="text-muted mb-3">
-                        <i class="bi bi-person me-2"></i>
-                        Organized by <strong><?php echo sanitizeOutput($event['organizer_name']); ?></strong>
-                    </p>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <p><i class="bi bi-currency-dollar me-2"></i><strong>Price:</strong> 
+                       $<?= number_format($event['price'], 2) ?></p>
+                </div>
+                <div class="col-md-6">
+                    <p><i class="bi bi-ticket me-2"></i><strong>Available Tickets:</strong> 
+                       <?= $event['available_tickets'] ?> of <?= $event['total_tickets'] ?></p>
+                </div>
+            </div>
+            
+            <?php if (!empty($event['organizer_name'])): ?>
+            <p><i class="bi bi-person me-2"></i><strong>Organizer:</strong> 
+               <?= htmlspecialchars($event['organizer_name']) ?></p>
+            <?php endif; ?>
+            
+            <div class="mt-4">
+                <h3>About This Event</h3>
+                <p><?= nl2br(htmlspecialchars($event['description'])) ?></p>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Book Tickets</h5>
+                    
+                    <?php if (!isset($_SESSION['user_id'])): ?>
+                        <div class="alert alert-info">
+                            <p class="mb-2">Please <a href="auth/login.php">login</a> to book tickets.</p>
+                            <p class="mb-0">Don't have an account? <a href="auth/register.php">Register here</a></p>
+                        </div>
+                    <?php elseif ($event['available_tickets'] <= 0): ?>
+                        <div class="alert alert-warning">
+                            <p class="mb-0">Sorry, this event is sold out!</p>
+                        </div>
+                    <?php else: ?>
+                        <!-- Booking Form -->
+                        <?php if ($user_booking): ?>
+                            <div class="alert alert-success">
+                                <p class="mb-2"><strong>You have <?= $user_booking['tickets_requested'] ?> tickets in your cart</strong></p>
+                                <p class="mb-2">Status: <?= ucfirst($user_booking['status']) ?></p>
+                                <a href="user/my_cart.php" class="btn btn-primary btn-sm">View Cart</a>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <form action="book_ticket.php" method="POST">
+                            <?php
+                            // Generate CSRF token
+                            if (!isset($_SESSION['csrf_token'])) {
+                                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                            }
+                            ?>
+                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                            <input type="hidden" name="event_id" value="<?= $event['id'] ?>">
+                            
+                            <div class="mb-3">
+                                <label for="tickets" class="form-label">Number of Tickets:</label>
+                                <select name="tickets" id="tickets" class="form-select" required>
+                                    <?php for($i = 1; $i <= min(10, $event['available_tickets']); $i++): ?>
+                                    <option value="<?= $i ?>"><?= $i ?></option>
+                                    <?php endfor; ?>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <p><strong>Total: $<span id="total-price"><?= number_format($event['price'], 2) ?></span></strong></p>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary w-100">
+                                <?= $user_booking ? 'Update Cart' : 'Add to Cart' ?>
+                            </button>
+                        </form>
                     <?php endif; ?>
                 </div>
-                
-                <!-- Messages -->
-                <?php if (isset($_SESSION['booking_errors'])): ?>
-                    <div class="alert alert-danger alert-dismissible fade show">
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        <?php foreach ($_SESSION['booking_errors'] as $error): ?>
-                            <div><?php echo sanitizeOutput($error); ?></div>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php unset($_SESSION['booking_errors']); ?>
-                <?php endif; ?>
-                
-                <?php if (isset($_SESSION['booking_success'])): ?>
-                    <div class="alert alert-success alert-dismissible fade show">
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        <?php echo sanitizeOutput($_SESSION['booking_success']); ?>
-                    </div>
-                    <?php unset($_SESSION['booking_success']); ?>
-                <?php endif; ?>
-                
-                <!-- Pricing & Availability -->
-                <div class="row mb-4">
-                    <div class="col-6">
-                        <div class="text-center p-3 bg-primary text-white rounded">
-                            <h3 class="mb-0">$<?php echo number_format($event['price'], 2); ?></h3>
-                            <small>per ticket</small>
+            </div>
+            
+            <!-- Event Stats -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6 class="card-title">Event Statistics</h6>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 class="text-primary"><?= $event['total_tickets'] - $event['available_tickets'] ?></h4>
+                            <small class="text-muted">Tickets Sold</small>
                         </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="text-center p-3 <?php echo $event['available_tickets'] > 0 ? 'bg-success' : 'bg-danger'; ?> text-white rounded">
-                            <h3 class="mb-0"><?php echo $event['available_tickets']; ?></h3>
-                            <small>tickets left</small>
+                        <div class="col-6">
+                            <h4 class="text-success"><?= $event['available_tickets'] ?></h4>
+                            <small class="text-muted">Available</small>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Booking Section -->
-                <?php if (isLoggedIn()): ?>
-    
-    <?php if ($user_booking && $user_booking['status'] === 'booked'): ?>
-        <!-- User has confirmed booking awaiting payment -->
-        <div class="alert alert-warning">
-            <i class="bi bi-clock me-2"></i>
-            <strong>Booking Confirmed!</strong>
-            <br>You have <?php echo $user_booking['tickets_requested']; ?> tickets reserved.
-            <br><small>Complete payment within 15 minutes to secure your booking.</small>
-        </div>
-        
-        <div class="d-grid gap-2">
-            <a href="payment/checkout.php?booking_id=<?php echo $user_booking['id']; ?>" class="btn btn-success btn-lg">
-                <i class="bi bi-credit-card me-2"></i>Complete Payment
-            </a>
-            <a href="user/my_cart.php" class="btn btn-outline-primary">
-                <i class="bi bi-cart me-2"></i>View Cart
-            </a>
-        </div>
-        
-    <?php elseif ($user_booking && $user_booking['status'] === 'cart'): ?>
-        <!-- User has tickets in cart -->
-        <div class="alert alert-info">
-            <i class="bi bi-cart me-2"></i>
-            <strong><?php echo $user_booking['tickets_requested']; ?> tickets in your cart</strong>
-        </div>
-        
-        <div class="d-grid gap-2 mb-3">
-            <a href="confirm_booking.php?id=<?php echo $user_booking['id']; ?>" class="btn btn-success btn-lg">
-                <i class="bi bi-check-circle me-2"></i>Confirm Booking
-            </a>
-            <a href="user/my_cart.php" class="btn btn-outline-primary">
-                <i class="bi bi-cart me-2"></i>View Cart
-            </a>
-        </div>
-        
-    <?php elseif ($event['available_tickets'] > 0): ?>
-        <!-- Add to Cart Form -->
-        <form method="POST" action="book_ticket.php" class="needs-validation" novalidate>
-            <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
-            <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
-            
-            <div class="mb-3">
-                <label for="tickets" class="form-label">Number of Tickets</label>
-                <select class="form-select" id="tickets" name="tickets" required>
-                    <option value="">Select tickets...</option>
-                    <?php for ($i = 1; $i <= min(10, $event['available_tickets']); $i++): ?>
-                        <option value="<?php echo $i; ?>"><?php echo $i; ?> ticket<?php echo $i > 1 ? 's' : ''; ?></option>
-                    <?php endfor; ?>
-                </select>
-            </div>
-            
-            <div class="mb-3">
-                <strong>Total: <span id="totalAmount" class="fw-bold text-muted">Select tickets first</span></strong>
-            </div>
-            
-            <button type="submit" class="btn btn-primary btn-lg w-100">
-                <i class="bi bi-cart-plus me-2"></i>Add to Cart
-            </button>
-        </form>
-        
-    <?php else: ?>
-        <!-- Sold Out -->
-        <div class="text-center">
-            <button class="btn btn-secondary btn-lg w-100" disabled>
-                <i class="bi bi-x-circle me-2"></i>Sold Out
-            </button>
-        </div>
-    <?php endif; ?>
-    
-<?php elseif ($event['available_tickets'] > 0): ?>
-    <!-- Not logged in -->
-    <div class="text-center">
-        <a href="auth/login.php?redirect=event.php?id=<?php echo $event_id; ?>" class="btn btn-primary btn-lg w-100">
-            <i class="bi bi-person me-2"></i>Login to Book Tickets
-        </a>
-        <p class="text-muted mt-2">
-            <small>Don't have an account? <a href="auth/register.php">Register here</a></small>
-        </p>
-    </div>
-<?php else: ?>
-    <!-- Sold Out for guest -->
-    <div class="text-center">
-        <button class="btn btn-secondary btn-lg w-100" disabled>
-            <i class="bi bi-x-circle me-2"></i>Event Sold Out
-        </button>
-    </div>
-<?php endif; ?>
-
-<!-- Navigation -->
-<div class="mt-3 d-flex gap-2">
-    <a href="index.php" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-2"></i>Back to Events
-    </a>
-    <?php if (isLoggedIn()): ?>
-        <a href="user/my_cart.php" class="btn btn-outline-primary">
-            <i class="bi bi-cart me-2"></i>My Cart
-        </a>
-    <?php endif; ?>
-</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Event Description -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h4><i class="bi bi-info-circle me-2"></i>About This Event</h4>
-            </div>
-            <div class="card-body">
-                <?php if (!empty($event['description'])): ?>
-                    <p class="card-text" style="white-space: pre-line;"><?php echo sanitizeOutput($event['description']); ?></p>
-                <?php else: ?>
-                    <p class="text-muted">No description available for this event.</p>
-                <?php endif; ?>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-// Calculate total amount when tickets change
-document.addEventListener('DOMContentLoaded', function() {
-    const ticketsSelect = document.getElementById('tickets');
-    const totalAmountSpan = document.getElementById('totalAmount');
-    const pricePerTicket = <?php echo $event['price']; ?>;
-    
-    if (ticketsSelect && totalAmountSpan) {
-        ticketsSelect.addEventListener('change', function() {
-            const tickets = parseInt(this.value) || 0;
-            if (tickets > 0) {
-                const total = tickets * pricePerTicket;
-                totalAmountSpan.textContent = '$' + total.toFixed(2);
-                totalAmountSpan.className = 'fw-bold text-success';
-            } else {
-                totalAmountSpan.textContent = 'Select tickets first';
-                totalAmountSpan.className = 'fw-bold text-muted';
-            }
-        });
-    }
+// Update total price when tickets change
+document.getElementById('tickets').addEventListener('change', function() {
+    const tickets = parseInt(this.value);
+    const price = <?= $event['price'] ?>;
+    const total = tickets * price;
+    document.getElementById('total-price').textContent = total.toFixed(2);
 });
 </script>
 
-<?php include __DIR__ . '/inc/footer.php'; ?>
+<?php include 'inc/footer.php'; ?>
