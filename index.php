@@ -1,17 +1,27 @@
 <?php
-// Add this at the very top of your existing index.php
+// Railway-compatible setup
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('log_errors', 1);
+
+// Railway port and host detection
+$port = $_ENV['PORT'] ?? getenv('PORT') ?? '8080';
+$host = '0.0.0.0';
+
+// Log server info for debugging
+error_log("Railway Server Info: Host=$host, Port=$port, SAPI=" . php_sapi_name());
 
 // Debug endpoint for Railway
 if (isset($_GET['debug']) && $_GET['debug'] === 'railway') {
     echo "<h1>🚀 Railway Debug Info</h1>";
     echo "<p><strong>PHP Version:</strong> " . phpversion() . "</p>";
-    echo "<p><strong>Railway Environment:</strong> " . (getenv('RAILWAY_ENVIRONMENT') ? 'YES' : 'NO') . "</p>";
+    echo "<p><strong>SAPI:</strong> " . php_sapi_name() . "</p>";
+    echo "<p><strong>Railway Environment:</strong> " . (getenv('RAILWAY_ENVIRONMENT_NAME') ? 'YES' : 'NO') . "</p>";
+    echo "<p><strong>Server Host:</strong> " . $host . "</p>";
+    echo "<p><strong>Server Port:</strong> " . $port . "</p>";
     
     // Test environment variables
-    $env_vars = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_PORT'];
+    $env_vars = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_PORT', 'PORT', 'RAILWAY_ENVIRONMENT_NAME'];
     foreach ($env_vars as $var) {
         $value = $_ENV[$var] ?? getenv($var) ?? 'NOT SET';
         $display_value = ($var === 'DB_PASSWORD') ? (($value !== 'NOT SET') ? '***SET***' : 'NOT SET') : $value;
@@ -22,16 +32,18 @@ if (isset($_GET['debug']) && $_GET['debug'] === 'railway') {
     try {
         require_once __DIR__ . '/inc/db_secure.php';
         echo "<p><strong>✅ Database:</strong> Connected successfully</p>";
+        
         $stmt = $pdo->query("SELECT COUNT(*) as count FROM users");
         $result = $stmt->fetch();
         echo "<p><strong>✅ Users:</strong> {$result['count']} users found</p>";
         
         $stmt = $pdo->query("SELECT COUNT(*) as count FROM events");
-        $result = $stmt->fetch();
+        $result = $stmt->fetch();  
         echo "<p><strong>✅ Events:</strong> {$result['count']} events found</p>";
         
     } catch (Exception $e) {
         echo "<p><strong>❌ Database Error:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
+        echo "<p><strong>Error File:</strong> " . $e->getFile() . " Line: " . $e->getLine() . "</p>";
     }
     
     echo "<p><a href='/'>← Back to main site</a></p>";

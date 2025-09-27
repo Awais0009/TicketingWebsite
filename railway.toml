@@ -1,0 +1,6 @@
+[build]
+
+[deploy]
+startCommand = "php -S 0.0.0.0:$PORT"
+restartPolicyType = "always"
+restartPolicyMaxRetries = 10

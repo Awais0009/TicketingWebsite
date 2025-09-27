@@ -1,6 +1,13 @@
 <?php
-// Load environment variables
+// Update your db_secure.php to handle Railway better
 function loadEnvVariables($file = '.env') {
+    // Skip .env loading on Railway - it uses system environment variables
+    if (getenv('RAILWAY_ENVIRONMENT_NAME') !== false) {
+        error_log("Railway environment detected, using system environment variables");
+        return;
+    }
+    
+    // Load environment variables
     if (!file_exists($file)) {
         return false;
     }
