@@ -13,6 +13,10 @@ error_log("Railway Server Info: Host=$host, Port=$port, SAPI=" . php_sapi_name()
 
 // Debug endpoint for Railway
 if (isset($_GET['debug']) && $_GET['debug'] === 'railway') {
+    http_response_code(200);
+    header('Content-Type: text/html; charset=UTF-8');
+    header('Cache-Control: no-cache');
+    
     echo "<h1>🚀 Railway Debug Info</h1>";
     echo "<p><strong>PHP Version:</strong> " . phpversion() . "</p>";
     echo "<p><strong>SAPI:</strong> " . php_sapi_name() . "</p>";
@@ -28,18 +32,31 @@ if (isset($_GET['debug']) && $_GET['debug'] === 'railway') {
         echo "<p><strong>$var:</strong> $display_value</p>";
     }
     
+    // Test file existence
+    $files_to_check = ['inc/db_secure.php', 'inc/header.php', 'inc/footer.php'];
+    echo "<h3>File Check:</h3>";
+    foreach ($files_to_check as $file) {
+        $exists = file_exists($file) ? '✅ EXISTS' : '❌ MISSING';
+        echo "<p><strong>$file:</strong> $exists</p>";
+    }
+    
     // Test database connection
+    echo "<h3>Database Test:</h3>";
     try {
-        require_once __DIR__ . '/inc/db_secure.php';
-        echo "<p><strong>✅ Database:</strong> Connected successfully</p>";
-        
-        $stmt = $pdo->query("SELECT COUNT(*) as count FROM users");
-        $result = $stmt->fetch();
-        echo "<p><strong>✅ Users:</strong> {$result['count']} users found</p>";
-        
-        $stmt = $pdo->query("SELECT COUNT(*) as count FROM events");
-        $result = $stmt->fetch();  
-        echo "<p><strong>✅ Events:</strong> {$result['count']} events found</p>";
+        if (file_exists('inc/db_secure.php')) {
+            require_once __DIR__ . '/inc/db_secure.php';
+            echo "<p><strong>✅ Database:</strong> Connected successfully</p>";
+            
+            $stmt = $pdo->query("SELECT COUNT(*) as count FROM users");
+            $result = $stmt->fetch();
+            echo "<p><strong>✅ Users:</strong> {$result['count']} users found</p>";
+            
+            $stmt = $pdo->query("SELECT COUNT(*) as count FROM events");
+            $result = $stmt->fetch();  
+            echo "<p><strong>✅ Events:</strong> {$result['count']} events found</p>";
+        } else {
+            echo "<p><strong>❌ Database:</strong> db_secure.php not found</p>";
+        }
         
     } catch (Exception $e) {
         echo "<p><strong>❌ Database Error:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
@@ -53,7 +70,27 @@ if (isset($_GET['debug']) && $_GET['debug'] === 'railway') {
 // Health check endpoint
 if ($_SERVER['REQUEST_URI'] === '/health') {
     http_response_code(200);
-    echo json_encode(['status' => 'ok', 'time' => date('c')]);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-cache');
+    echo json_encode([
+        'status' => 'ok', 
+        'time' => date('c'),
+        'port' => $port,
+        'host' => $host,
+        'php_version' => phpversion()
+    ]);
+    exit;
+}
+
+// Simple test endpoint 
+if ($_SERVER['REQUEST_URI'] === '/test') {
+    http_response_code(200);
+    header('Content-Type: text/html');
+    echo "<h1>🎯 Railway Test Page</h1>";
+    echo "<p>If you can see this, Railway is working!</p>";
+    echo "<p>PHP Version: " . phpversion() . "</p>";
+    echo "<p>Current Time: " . date('Y-m-d H:i:s') . "</p>";
+    echo "<p><a href='/?debug=railway'>Debug Info</a></p>";
     exit;
 }
 
@@ -72,7 +109,6 @@ try {
     
     if (!empty($search)) {
         $sql .= " AND (title ILIKE ? OR description ILIKE ?)";
-
         $params[] = "%$search%";
         $params[] = "%$search%";
     }
@@ -103,7 +139,22 @@ try {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'inc/header.php'; ?>
+    <?php 
+    // Safe include for header
+    try {
+        if (file_exists('inc/header.php')) {
+            include 'inc/header.php';
+        } else {
+            // Simple navigation if header missing
+            echo '<nav class="navbar navbar-expand-lg navbar-dark bg-primary">';
+            echo '<div class="container"><a class="navbar-brand" href="/">Event Tickets</a></div>';
+            echo '</nav>';
+        }
+    } catch (Exception $e) {
+        error_log("Header include error: " . $e->getMessage());
+        echo '<div class="alert alert-warning">Navigation temporarily unavailable</div>';
+    }
+    ?>
     
     <!-- Hero Section -->
     <div class="bg-primary text-white py-5">
@@ -190,7 +241,20 @@ try {
         <?php endif; ?>
     </div>
     
-    <?php include 'inc/footer.php'; ?>
+    <?php 
+    // Safe include for footer
+    try {
+        if (file_exists('inc/footer.php')) {
+            include 'inc/footer.php';
+        } else {
+            echo '<footer class="bg-dark text-white text-center py-3">';
+            echo '<div class="container"><p>&copy; 2025 Event Tickets. All rights reserved.</p></div>';
+            echo '</footer>';
+        }
+    } catch (Exception $e) {
+        error_log("Footer include error: " . $e->getMessage());
+    }
+    ?>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
@@ -204,11 +268,12 @@ try {
     
     // Show user-friendly error
     http_response_code(500);
+    header('Content-Type: text/html; charset=UTF-8');
     echo "<!DOCTYPE html><html><head><title>Error</title></head><body>";
     echo "<h1>🚨 Website Error</h1>";
     echo "<p>We're experiencing technical difficulties. Please try again later.</p>";
     echo "<p>Error details: " . htmlspecialchars($e->getMessage()) . "</p>";
-    echo "<p><a href='/?debug=railway'>Debug Info</a> | <a href='/health'>Health Check</a></p>";
+    echo "<p><a href='/?debug=railway'>Debug Info</a> | <a href='/health'>Health Check</a> | <a href='/test'>Simple Test</a></p>";
     echo "</body></html>";
 } catch (Throwable $e) {
     // Catch any other errors
