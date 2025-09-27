@@ -1,0 +1,13 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /inc/
+Disallow: /payment/
+Disallow: /user/
+Disallow: /organizer/
+Disallow: *.php$
+Allow: /index.php
+Allow: /event.php
+
+# Sitemap location (update with your domain)
+Sitemap: https://yourdomain.com/sitemap.xml

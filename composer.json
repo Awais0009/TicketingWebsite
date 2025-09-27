@@ -1,0 +1,10 @@
+{
+    "require": {
+        "php": ">=8.0"
+    },
+    "scripts": {
+        "post-install-cmd": [
+            "echo 'Ticketing Website deployed successfully'"
+        ]
+    }
+}

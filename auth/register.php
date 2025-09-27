@@ -3,7 +3,7 @@
 session_start();
 
 // Include required files  
-require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/db_secure.php';
 require_once __DIR__ . '/../inc/functions.php';
 require_once __DIR__ . '/../inc/security.php';
 

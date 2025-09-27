@@ -3,17 +3,16 @@
 // Set secure session configuration BEFORE session_start()
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1);
-    ini_set('session.cookie_secure', 0); // Set to 1 for HTTPS only
+    ini_set('session.cookie_secure', 1); // Set to 1 for HTTPS only in production
     ini_set('session.use_strict_mode', 1);
     session_start();
 }
 
-// Database configuration
-$host = "ep-fancy-moon-afiiy7ck-pooler.c-2.us-west-2.aws.neon.tech";
-$dbname = "neondb";
-$user = "neondb_owner";
-$password = "npg_5aCRYOblr1Qw";
-
+// Database configuration from environment variables
+$host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?? "ep-fancy-moon-afiiy7ck-pooler.c-2.us-west-2.aws.neon.tech";
+$dbname = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?? "neondb";
+$user = $_ENV['DB_USER'] ?? getenv('DB_USER') ?? "neondb_owner";
+$password = $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD') ?? "npg_5aCRYOblr1Qw";
 
 try {
     $dsn = "pgsql:host=$host;port=5432;dbname=$dbname;sslmode=require";

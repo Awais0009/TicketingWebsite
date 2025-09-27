@@ -4,7 +4,7 @@
         <div class="container">
             <div class="row">
                 <div class="col-md-6">
-                    <h5><i class="bi bi-ticket-perforated me-2"></i>TicketHub</h5>
+                    <h5><i class="bi bi-ticket-perforated me-2"></i>EventTickets</h5>
                     <p>Your premier destination for event tickets and experiences.</p>
                 </div>
                 <div class="col-md-6">
@@ -12,13 +12,13 @@
                     <ul class="list-unstyled">
                         <li><a href="index.php" class="text-light text-decoration-none">Home</a></li>
                         <li><a href="events.php" class="text-light text-decoration-none">Events</a></li>
-                        <li><a href="contact.php" class="text-light text-decoration-none">Contact</a></li>
+                        
                     </ul>
                 </div>
             </div>
             <hr>
             <div class="text-center">
-                <p>&copy; <?= date('Y') ?> TicketHub. All rights reserved.</p>
+                <p>&copy; <?= date('Y') ?> EventTickets. All rights reserved.</p>
             </div>
         </div>
     </footer>

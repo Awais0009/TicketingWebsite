@@ -1,0 +1,57 @@
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# Database files
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# Debug/Test files
+debug_*.php
+test_*.php
+*_debug.php
+*_test.php
+
+# Backup files
+*_backup.*
+*_old.*
+*.bak
+*.orig
+
+# Logs
+logs/
+*.log
+error_log
+
+# Cache
+cache/
+tmp/
+temp/
+
+# Upload directories (if any)
+uploads/
+images/user_uploads/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Config files with sensitive data
+config.local.php
+database.local.php
+
+# Development tools
+composer.phar
+phpunit.phar

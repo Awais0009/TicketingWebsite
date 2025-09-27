@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'inc/db.php';
+require_once 'inc/db_secure.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
